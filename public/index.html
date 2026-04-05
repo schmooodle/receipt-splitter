@@ -42,15 +42,28 @@
     .store-meta { font-size: 0.85rem; color: #666; margin-bottom: 16px; }
 
     .category-group { margin-bottom: 16px; }
-    .category-label {
+    .category-header {
       font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-      color: #fff; background: #007aff; padding: 3px 8px; border-radius: 20px;
-      display: inline-block; margin-bottom: 8px;
+      color: #fff; padding: 3px 8px; border-radius: 20px; display: inline-block; margin-bottom: 8px;
     }
-    .item-row { display: flex; justify-content: space-between; padding: 6px 0;
-      border-bottom: 1px solid #f0f0f0; font-size: 0.95rem; }
+
+    .item-row { display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.95rem; gap: 8px; }
     .item-row:last-child { border-bottom: none; }
-    .item-price { font-weight: 600; flex-shrink: 0; margin-left: 12px; }
+    .item-name { flex: 1; }
+    .item-price { font-weight: 600; flex-shrink: 0; }
+
+    .category-badge {
+      font-size: 0.7rem; font-weight: 600; color: #fff; padding: 2px 7px;
+      border-radius: 20px; cursor: pointer; flex-shrink: 0;
+      border: none; transition: opacity 0.15s;
+    }
+    .category-badge:hover { opacity: 0.8; }
+
+    .category-select {
+      font-size: 0.75rem; border: 1px solid #ccc; border-radius: 8px;
+      padding: 3px 6px; background: #fff; cursor: pointer; flex-shrink: 0;
+    }
 
     .total-row { display: flex; justify-content: space-between; padding: 12px 0 0;
       border-top: 2px solid #1a1a1a; font-weight: 700; font-size: 1rem; margin-top: 8px; }
@@ -75,16 +88,29 @@
   </div>
 
   <img class="preview-img" id="previewImg" />
-
   <button class="btn btn-primary" id="scanBtn" disabled onclick="scanReceipt()">Scan Receipt</button>
-
   <div id="status"></div>
   <div id="results"></div>
 </div>
 
 <script>
+  const CATEGORIES = [
+    "Groceries", "Household Supplies", "House Projects",
+    "Health", "Pet Expenses", "Clothes"
+  ];
+
+  const CATEGORY_COLORS = {
+    "Groceries": "#34c759",
+    "Household Supplies": "#ff9500",
+    "House Projects": "#5856d6",
+    "Health": "#ff2d55",
+    "Pet Expenses": "#af52de",
+    "Clothes": "#007aff"
+  };
+
   let imageBase64 = "";
   let imageMediaType = "";
+  let receiptData = null;
 
   document.getElementById("fileInput").addEventListener("change", (e) => {
     const file = e.target.files[0];
@@ -116,9 +142,16 @@
         body: JSON.stringify({ image: imageBase64, mediaType: imageMediaType }),
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data = await res.json();
+      receiptData = await res.json();
+
+      // Normalize "House Expenses" to "House Projects" in case Claude uses old name
+      receiptData.items = receiptData.items.map(item => ({
+        ...item,
+        category: item.category === "House Expenses" ? "House Projects" : item.category
+      }));
+
       document.getElementById("status").innerHTML = "";
-      renderResults(data);
+      renderResults();
     } catch (err) {
       document.getElementById("status").innerHTML = "";
       document.getElementById("results").innerHTML = `<div class="error">❌ ${err.message}</div>`;
@@ -127,39 +160,44 @@
     }
   }
 
-  function renderResults(data) {
+  function changeCategory(index, newCategory) {
+    receiptData.items[index].category = newCategory;
+    renderResults();
+  }
+
+  function renderResults() {
     const grouped = {};
-    let itemTotal = 0;
-    for (const item of data.items) {
+    for (const [i, item] of receiptData.items.entries()) {
       if (!grouped[item.category]) grouped[item.category] = [];
-      grouped[item.category].push(item);
-      itemTotal += item.price;
+      grouped[item.category].push({ ...item, index: i });
     }
 
-    const categoryColors = {
-      "Groceries": "#34c759", "Household Supplies": "#ff9500",
-      "House Expenses": "#5856d6", "Health": "#ff2d55",
-      "Pet Expenses": "#af52de", "Clothes": "#007aff"
-    };
-
     let html = `<div class="results">
-      <div class="store-name">${data.store || "Receipt"}</div>
-      <div class="store-meta">${data.date || ""}</div>`;
+      <div class="store-name">${receiptData.store || "Receipt"}</div>
+      <div class="store-meta">${receiptData.date || ""}</div>`;
 
     for (const [cat, items] of Object.entries(grouped)) {
-      const color = categoryColors[cat] || "#8e8e93";
+      const color = CATEGORY_COLORS[cat] || "#8e8e93";
       html += `<div class="category-group">
-        <span class="category-label" style="background:${color}">${cat}</span>`;
+        <span class="category-header" style="background:${color}">${cat}</span>`;
       for (const item of items) {
+        const optionsHTML = CATEGORIES.map(c =>
+          `<option value="${c}" ${c === item.category ? "selected" : ""}>${c}</option>`
+        ).join("");
         html += `<div class="item-row">
-          <span>${item.name}</span>
+          <span class="item-name">${item.name}</span>
+          <select class="category-select" onchange="changeCategory(${item.index}, this.value)"
+            style="border-color:${color}">
+            ${optionsHTML}
+          </select>
           <span class="item-price">$${item.price.toFixed(2)}</span>
         </div>`;
       }
       html += `</div>`;
     }
 
-    html += `<div class="total-row"><span>Total</span><span>$${(data.total ?? itemTotal).toFixed(2)}</span></div>`;
+    const itemTotal = receiptData.items.reduce((s, i) => s + i.price, 0);
+    html += `<div class="total-row"><span>Total</span><span>$${(receiptData.total ?? itemTotal).toFixed(2)}</span></div>`;
 
     // Category summary
     html += `<div class="category-summary">`;
@@ -170,9 +208,7 @@
       html += `<div class="summary-row"><span>${cat}</span><span>$${catTotal.toFixed(2)}</span></div>`;
     }
     html += `<div class="summary-row total"><span>Total</span><span>$${summaryTotal.toFixed(2)}</span></div>`;
-    html += `</div>`;
-
-    html += `</div>`;
+    html += `</div></div>`;
     html += `<button class="btn btn-secondary" onclick="rescan()">📷 Scan Another</button>`;
 
     document.getElementById("results").innerHTML = html;
@@ -185,6 +221,7 @@
     document.getElementById("status").innerHTML = "";
     document.getElementById("scanBtn").disabled = true;
     imageBase64 = "";
+    receiptData = null;
   }
 </script>
 </body>
