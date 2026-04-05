@@ -29,12 +29,16 @@ export default async function handler(req, res) {
               },
               {
                 type: "text",
-                text: `You are a receipt parser. Extract every line item from this receipt and assign each one to exactly one of these YNAB budget categories: House Projects, Clothes, Health, Pet Expenses, Groceries, Household Supplies.
+text: `You are a receipt parser. Extract every line item from this receipt and assign each one to exactly one of these YNAB budget categories: House Projects, Clothes, Health, Pet Expenses, Groceries, Household Supplies.
+
+If the receipt includes sales tax, distribute it proportionally across all items based on each item's share of the subtotal. Each item's price in the output should be its tax-adjusted price (pre-tax price × total / subtotal). The sum of all item prices must equal the receipt total exactly.
 
 Return ONLY valid JSON in this exact format, no explanation:
 {
   "store": "store name",
   "date": "date if visible",
+  "subtotal": 00.00,
+  "tax": 00.00,
   "total": 00.00,
   "items": [
     { "name": "item name", "price": 0.00, "category": "Category Name" }
