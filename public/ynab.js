@@ -53,16 +53,23 @@ export function buildTransaction(receiptData, accountId, categories) {
     grouped[item.category].amount += item.price
   }
 
-  const subtransactions = Object.values(grouped).map(sub => ({
-    amount: -Math.round(sub.amount * 1000),
-    category_id: sub.category_id,
-    memo: sub.memo
-  }))
+  const total = -Math.round(receiptData.total * 1000)
 
-  return {
-    account_id: accountId,
-    date: receiptData.date || new Date().toISOString().split('T')[0],
-    amount: -Math.round(receiptData.total * 1000),
+let subtransactions = Object.values(grouped).map(sub => ({
+  amount: -Math.round(sub.amount * 1000),
+  category_id: sub.category_id,
+  memo: sub.memo
+}))
+
+// Fix rounding drift so subtransactions always sum to total exactly
+const subTotal = subtransactions.reduce((s, t) => s + t.amount, 0)
+const drift = total - subTotal
+if (drift !== 0) subtransactions[0].amount += drift
+
+return {
+  account_id: accountId,
+  date: receiptData.date || new Date().toISOString().split('T')[0],
+  amount: total,
     payee_name: receiptData.store,
     memo: 'via Receipt Splitter',
     approved: false,

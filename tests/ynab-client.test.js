@@ -159,10 +159,23 @@ describe('buildTransaction', () => {
 
   it('includes via Receipt Splitter memo', () => {
     const receipt = {
-      store: 'Costco', date: '2026-04-09', total: 50.00,
-      items: [{ name: 'Apples', price: 50.00, category: 'Groceries' }]
+      store: 'Costco', date: '2026-04-09', total: 10.00,
+      items: [{ name: 'Apples', price: 10.00, category: 'Groceries', categoryId: 'uuid-1' }]
     }
     const result = buildTransaction(receipt, 'account-1', categories)
     expect(result.memo).toBe('via Receipt Splitter')
+  })
+
+  it('subtransaction amounts always sum to total exactly', () => {
+    const receipt = {
+      store: 'Costco', date: '2026-04-09', total: 215.42,
+      items: [
+        { name: 'Apples', price: 195.19, category: 'Groceries' },
+        { name: 'Hoto Wand', price: 20.23, category: 'House Projects' }
+      ]
+    }
+    const result = buildTransaction(receipt, 'account-1', categories)
+    const subSum = result.subtransactions.reduce((s, t) => s + t.amount, 0)
+    expect(subSum).toBe(result.amount)
   })
 })
