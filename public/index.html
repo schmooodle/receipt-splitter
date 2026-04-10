@@ -116,11 +116,12 @@
   let selectedAccountId = ACCOUNTS[0].id
 
   // Load YNAB categories on startup
-  async function init() {
+async function init() {
     try {
       ynabCategories = await fetchCategories()
+      console.log('Categories loaded:', ynabCategories?.length)
     } catch (err) {
-      console.warn('Could not load YNAB categories:', err)
+      console.error('Could not load YNAB categories:', err)
     }
   }
 
@@ -241,7 +242,7 @@ console.log('Image size KB:', Math.round(compressed.length * 0.75 / 1024))
   }
 
   function renderResults() {
-    const categoryNames = ynabCategories.map(c => c.name)
+    const categoryNames = (ynabCategories || []).map(c => c.name)
 
     const grouped = {}
     for (const [i, item] of receiptData.items.entries()) {
