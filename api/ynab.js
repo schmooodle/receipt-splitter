@@ -52,7 +52,8 @@ const categories = data.data.category_groups
         }
       );
       const data = await response.json();
-      return res.status(200).json(data);
+console.log('YNAB post response:', JSON.stringify(data).slice(0, 500));
+return res.status(200).json(data);
     }
 
     return res.status(400).json({ error: "Unknown action" });
