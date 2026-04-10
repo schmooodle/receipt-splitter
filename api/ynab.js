@@ -18,7 +18,8 @@ export default async function handler(req, res) {
         { headers: { Authorization: `Bearer ${YNAB_PAT}` } }
       );
       const data = await response.json();
-      const categories = data.data.category_groups
+console.log('YNAB response:', JSON.stringify(data).slice(0, 200));
+const categories = data.data.category_groups
         .filter(g => !g.hidden && !g.deleted && g.name !== "Internal Master Category" && g.name !== "Credit Card Payments")
         .flatMap(g => g.categories
           .filter(c => !c.hidden && !c.deleted)
