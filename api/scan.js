@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { image, mediaType } = req.body;
+    const { image, mediaType, categoryNames } = req.body;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
               },
               {
                 type: "text",
-text: `You are a receipt parser. Extract every line item from this receipt and assign each one to exactly one of these YNAB budget categories: House Projects, Clothes, Health, Pet Expenses, Groceries, Household Supplies.
+text: `You are a receipt parser. Extract every line item from this receipt and assign each one to exactly one of these YNAB budget categories: ${categoryNames || 'Groceries, Household Supplies, House Projects, Health, Pet Expenses, Clothes'}.
 
 If the receipt includes sales tax, you MUST distribute it proportionally across all items. Follow these steps exactly:
 1. Find the subtotal (pre-tax total) and tax amount
