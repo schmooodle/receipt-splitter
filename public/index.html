@@ -142,7 +142,8 @@ reader.onload = (ev) => {
     canvas.width = width
     canvas.height = height
     canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-    const compressed = canvas.toDataURL('image/jpeg', 0.85)
+const compressed = canvas.toDataURL('image/jpeg', 0.85)
+console.log('Image size KB:', Math.round(compressed.length * 0.75 / 1024))
     imageBase64 = compressed.split(",")[1]
     imageMediaType = 'image/jpeg'
     const preview = document.getElementById("previewImg")
