@@ -1,0 +1,29 @@
+{
+  "name": "receipt-splitter",
+  "version": "1.0.0",
+  "description": "Mobile receipt scanner that splits costs into YNAB budget categories",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "vitest": {
+    "environment": "jsdom"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schmooodle/receipt-splitter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/schmooodle/receipt-splitter/issues"
+  },
+  "homepage": "https://github.com/schmooodle/receipt-splitter#readme",
+  "devDependencies": {
+    "jsdom": "^29.0.2",
+    "vitest": "^4.1.4"
+  }
+}
