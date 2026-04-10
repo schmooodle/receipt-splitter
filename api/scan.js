@@ -38,6 +38,12 @@ If the receipt includes sales tax, you MUST distribute it proportionally across 
 4. Return the tax-adjusted price for every item — never the pre-tax price
 5. Double-check that all item prices sum to the receipt total before responding
 
+Important rules for special line items:
+- Discounts, coupons, and negative amounts (shown with - suffix) must be SUBTRACTED from the relevant item's price or distributed as a negative item — never added as positive amounts
+- Ignore subtotal, tax, and total lines — do not include these as items
+- Ignore membership numbers, transaction IDs, and receipt metadata
+- Only include actual purchased products as line items
+
 Return ONLY valid JSON in this exact format, no explanation:
 {
   "store": "store name",
