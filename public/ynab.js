@@ -1,62 +1,71 @@
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+export const ACCOUNTS = [
+  { id: "88528ad4-93eb-494a-b787-4edaa04256e1", name: "Bank of America Card" },
+  { id: "bf38ccc2-d06b-442e-8ebb-caa770780535", name: "Amex Card" },
+  { id: "fad9f1ec-00e9-4e5a-8f68-4211a0b5d6ff", name: "Chase Card" }
+]
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+export async function fetchCategories() {
+  const res = await fetch('/api/ynab', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'getCategories' })
+  })
+  const data = await res.json()
+  return data.categories
+}
 
-  const YNAB_PAT = process.env.YNAB_PAT;
-  const BUDGET_ID = "f1ba5c37-6cf5-45cb-b67d-9c437cf91bd5";
+export async function postTransaction(transaction) {
+  const res = await fetch('/api/ynab', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'postTransaction', transaction })
+  })
+  return res.json()
+}
 
-  const { action, transaction } = req.body || {};
+export function getVendorMapping(storeName, mappings) {
+  return mappings[normalizeStoreName(storeName)] || null
+}
 
-  try {
-    // Fetch categories
-    if (action === "getCategories") {
-      const response = await fetch(
-        `https://api.ynab.com/v1/budgets/${BUDGET_ID}/categories`,
-        { headers: { Authorization: `Bearer ${YNAB_PAT}` } }
-      );
-      const data = await response.json();
-      const categories = data.data.category_groups
-        .filter(g => !g.hidden && !g.deleted && g.name !== "Internal Master Category" && g.name !== "Credit Card Payments")
-        .flatMap(g => g.categories
-          .filter(c => !c.hidden && !c.deleted)
-          .map(c => ({ id: c.id, name: c.name, group: g.name }))
-        );
-      return res.status(200).json({ categories });
+export function saveVendorMapping(storeName, accountId) {
+  const mappings = JSON.parse(localStorage.getItem('vendorMappings') || '{}')
+  mappings[normalizeStoreName(storeName)] = accountId
+  localStorage.setItem('vendorMappings', JSON.stringify(mappings))
+}
+
+export function normalizeStoreName(raw) {
+  return raw
+    .replace(/#\d+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+export function buildTransaction(receiptData, accountId, categories) {
+  const categoryMap = Object.fromEntries(categories.map(c => [c.name, c.id]))
+
+  const grouped = {}
+  for (const item of receiptData.items) {
+    const catId = categoryMap[item.category] || null
+    if (!grouped[item.category]) {
+      grouped[item.category] = { amount: 0, category_id: catId, memo: item.category }
     }
+    grouped[item.category].amount += item.price
+  }
 
-    // Fetch accounts
-    if (action === "getAccounts") {
-      const ACCOUNTS = [
-        { id: "88528ad4-93eb-494a-b787-4edaa04256e1", name: "Bank of America Card" },
-        { id: "bf38ccc2-d06b-442e-8ebb-caa770780535", name: "Amex Card" },
-        { id: "fad9f1ec-00e9-4e5a-8f68-4211a0b5d6ff", name: "Chase Card" }
-      ];
-      return res.status(200).json({ accounts: ACCOUNTS });
-    }
+  const subtransactions = Object.values(grouped).map(sub => ({
+    amount: -Math.round(sub.amount * 1000),
+    category_id: sub.category_id,
+    memo: sub.memo
+  }))
 
-    // Post transaction
-    if (action === "postTransaction") {
-      const response = await fetch(
-        `https://api.ynab.com/v1/budgets/${BUDGET_ID}/transactions`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${YNAB_PAT}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ transaction })
-        }
-      );
-      const data = await response.json();
-      return res.status(200).json(data);
-    }
-
-    return res.status(400).json({ error: "Unknown action" });
-
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+  return {
+    account_id: accountId,
+    date: receiptData.date || new Date().toISOString().split('T')[0],
+    amount: -Math.round(receiptData.total * 1000),
+    payee_name: receiptData.store,
+    memo: 'via Receipt Splitter',
+    approved: false,
+    subtransactions
   }
 }
