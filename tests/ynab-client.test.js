@@ -18,9 +18,16 @@ function saveVendorMapping(storeName, accountId, mappings) {
   return mappings
 }
 
+function formatDate(dateStr) {
+  if (!dateStr) return new Date().toISOString().split('T')[0]
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
+  const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (match) return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
+  return new Date().toISOString().split('T')[0]
+}
+
 function buildTransaction(receiptData, accountId, categories) {
   const categoryMap = Object.fromEntries(categories.map(c => [c.name, c.id]))
-
   const grouped = {}
   for (const item of receiptData.items) {
     const catId = categoryMap[item.category] || null
@@ -29,17 +36,19 @@ function buildTransaction(receiptData, accountId, categories) {
     }
     grouped[item.category].amount += item.price
   }
-
-  const subtransactions = Object.values(grouped).map(sub => ({
+  const total = -Math.round(receiptData.total * 1000)
+  let subtransactions = Object.values(grouped).map(sub => ({
     amount: -Math.round(sub.amount * 1000),
     category_id: sub.category_id,
     memo: sub.memo
   }))
-
+  const subTotal = subtransactions.reduce((s, t) => s + t.amount, 0)
+  const drift = total - subTotal
+  if (drift !== 0) subtransactions[0].amount += drift
   return {
     account_id: accountId,
-    date: receiptData.date || new Date().toISOString().split('T')[0],
-    amount: -Math.round(receiptData.total * 1000),
+    date: formatDate(receiptData.date),
+    amount: total,
     payee_name: receiptData.store,
     memo: 'via Receipt Splitter',
     approved: false,
@@ -160,7 +169,7 @@ describe('buildTransaction', () => {
   it('includes via Receipt Splitter memo', () => {
     const receipt = {
       store: 'Costco', date: '2026-04-09', total: 10.00,
-      items: [{ name: 'Apples', price: 10.00, category: 'Groceries', categoryId: 'uuid-1' }]
+      items: [{ name: 'Apples', price: 10.00, category: 'Groceries' }]
     }
     const result = buildTransaction(receipt, 'account-1', categories)
     expect(result.memo).toBe('via Receipt Splitter')
@@ -177,5 +186,23 @@ describe('buildTransaction', () => {
     const result = buildTransaction(receipt, 'account-1', categories)
     const subSum = result.subtransactions.reduce((s, t) => s + t.amount, 0)
     expect(subSum).toBe(result.amount)
+  })
+})
+
+describe('formatDate', () => {
+  it('passes through YYYY-MM-DD unchanged', () => {
+    expect(formatDate('2026-04-09')).toBe('2026-04-09')
+  })
+
+  it('converts MM/DD/YYYY to YYYY-MM-DD', () => {
+    expect(formatDate('02/27/2026')).toBe('2026-02-27')
+  })
+
+  it('returns today when date is null', () => {
+    expect(formatDate(null)).toBe(new Date().toISOString().split('T')[0])
+  })
+
+  it('returns today for unrecognized format', () => {
+    expect(formatDate('invalid')).toBe(new Date().toISOString().split('T')[0])
   })
 })

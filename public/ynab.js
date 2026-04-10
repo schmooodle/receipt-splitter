@@ -41,9 +41,16 @@ export function normalizeStoreName(raw) {
     .toLowerCase()
 }
 
+export function formatDate(dateStr) {
+  if (!dateStr) return new Date().toISOString().split('T')[0]
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
+  const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (match) return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
+  return new Date().toISOString().split('T')[0]
+}
+
 export function buildTransaction(receiptData, accountId, categories) {
   const categoryMap = Object.fromEntries(categories.map(c => [c.name, c.id]))
-
   const grouped = {}
   for (const item of receiptData.items) {
     const catId = categoryMap[item.category] || null
@@ -52,24 +59,19 @@ export function buildTransaction(receiptData, accountId, categories) {
     }
     grouped[item.category].amount += item.price
   }
-
   const total = -Math.round(receiptData.total * 1000)
-
-let subtransactions = Object.values(grouped).map(sub => ({
-  amount: -Math.round(sub.amount * 1000),
-  category_id: sub.category_id,
-  memo: sub.memo
-}))
-
-// Fix rounding drift so subtransactions always sum to total exactly
-const subTotal = subtransactions.reduce((s, t) => s + t.amount, 0)
-const drift = total - subTotal
-if (drift !== 0) subtransactions[0].amount += drift
-
-return {
-  account_id: accountId,
-  date: receiptData.date || new Date().toISOString().split('T')[0],
-  amount: total,
+  let subtransactions = Object.values(grouped).map(sub => ({
+    amount: -Math.round(sub.amount * 1000),
+    category_id: sub.category_id,
+    memo: sub.memo
+  }))
+  const subTotal = subtransactions.reduce((s, t) => s + t.amount, 0)
+  const drift = total - subTotal
+  if (drift !== 0) subtransactions[0].amount += drift
+  return {
+    account_id: accountId,
+    date: formatDate(receiptData.date),
+    amount: total,
     payee_name: receiptData.store,
     memo: 'via Receipt Splitter',
     approved: false,
