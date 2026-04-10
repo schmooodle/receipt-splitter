@@ -155,13 +155,6 @@ console.log('Image size KB:', Math.round(compressed.length * 0.75 / 1024))
   }
   img.src = ev.target.result
 }
-      const preview = document.getElementById("previewImg")
-      preview.src = ev.target.result
-      preview.style.display = "block"
-      document.getElementById("scanBtn").disabled = false
-      document.getElementById("results").innerHTML = ""
-      document.getElementById("status").innerHTML = ""
-    }
     reader.readAsDataURL(file)
   })
 
