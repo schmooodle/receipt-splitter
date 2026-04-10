@@ -30,6 +30,8 @@
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: #007aff; color: #fff; }
     .btn-secondary { background: #e5e5ea; color: #1a1a1a; margin-top: 10px; }
+    .btn-success { background: #34c759; color: #fff; margin-top: 10px; }
+    .btn-success:disabled { opacity: 0.5; }
 
     .status { text-align: center; padding: 20px; color: #666; font-size: 0.95rem; }
     .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #ccc;
@@ -46,19 +48,11 @@
       font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
       color: #fff; padding: 3px 8px; border-radius: 20px; display: inline-block; margin-bottom: 8px;
     }
-
     .item-row { display: flex; justify-content: space-between; align-items: center;
       padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.95rem; gap: 8px; }
     .item-row:last-child { border-bottom: none; }
     .item-name { flex: 1; }
     .item-price { font-weight: 600; flex-shrink: 0; }
-
-    .category-badge {
-      font-size: 0.7rem; font-weight: 600; color: #fff; padding: 2px 7px;
-      border-radius: 20px; cursor: pointer; flex-shrink: 0;
-      border: none; transition: opacity 0.15s;
-    }
-    .category-badge:hover { opacity: 0.8; }
 
     .category-select {
       font-size: 0.75rem; border: 1px solid #ccc; border-radius: 8px;
@@ -71,6 +65,19 @@
     .category-summary { margin-top: 16px; background: #f5f5f5; border-radius: 12px; padding: 12px; }
     .summary-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 4px 0; }
     .summary-row.total { font-weight: 700; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px; }
+
+    .account-selector { margin-top: 16px; background: #fff; border-radius: 16px; padding: 16px; }
+    .account-selector label { font-size: 0.85rem; color: #666; display: block; margin-bottom: 8px; }
+    .account-selector select {
+      width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 10px;
+      font-size: 0.95rem; background: #fff; cursor: pointer;
+    }
+    .account-hint { font-size: 0.78rem; color: #999; margin-top: 6px; }
+
+    .success-banner {
+      background: #f0fff4; border: 1px solid #34c759; border-radius: 12px;
+      padding: 16px; margin-top: 16px; text-align: center; color: #1a7a3a; font-weight: 600;
+    }
 
     .error { background: #fff0f0; border: 1px solid #ffcccc; border-radius: 12px;
       padding: 16px; color: #cc0000; font-size: 0.9rem; margin-top: 16px; }
@@ -93,136 +100,222 @@
   <div id="results"></div>
 </div>
 
-<script>
-  const CATEGORIES = [
-    "Groceries", "Household Supplies", "House Projects",
-    "Health", "Pet Expenses", "Clothes"
-  ];
+<script type="module">
+  import { fetchCategories, postTransaction, getVendorMapping, saveVendorMapping, buildTransaction, ACCOUNTS } from './ynab.js'
 
   const CATEGORY_COLORS = {
-    "Groceries": "#34c759",
-    "Household Supplies": "#ff9500",
-    "House Projects": "#5856d6",
-    "Health": "#ff2d55",
-    "Pet Expenses": "#af52de",
-    "Clothes": "#007aff"
-  };
+    "Groceries": "#34c759", "Household Supplies": "#ff9500",
+    "House Projects": "#5856d6", "Health": "#ff2d55",
+    "Pet Expenses": "#af52de", "Clothes": "#007aff"
+  }
 
-  let imageBase64 = "";
-  let imageMediaType = "";
-  let receiptData = null;
+  let imageBase64 = ""
+  let imageMediaType = ""
+  let receiptData = null
+  let ynabCategories = []
+  let selectedAccountId = ACCOUNTS[0].id
 
-  document.getElementById("fileInput").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    imageMediaType = file.type || "image/jpeg";
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      imageBase64 = ev.target.result.split(",")[1];
-      const preview = document.getElementById("previewImg");
-      preview.src = ev.target.result;
-      preview.style.display = "block";
-      document.getElementById("scanBtn").disabled = false;
-      document.getElementById("results").innerHTML = "";
-      document.getElementById("status").innerHTML = "";
-    };
-    reader.readAsDataURL(file);
-  });
-
-  async function scanReceipt() {
-    if (!imageBase64) return;
-    document.getElementById("scanBtn").disabled = true;
-    document.getElementById("status").innerHTML = `<p><span class="spinner"></span>Reading receipt…</p>`;
-    document.getElementById("results").innerHTML = "";
-
+  // Load YNAB categories on startup
+  async function init() {
     try {
-      const res = await fetch("/api/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imageBase64, mediaType: imageMediaType }),
-      });
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      receiptData = await res.json();
-
-      // Normalize "House Expenses" to "House Projects" in case Claude uses old name
-      receiptData.items = receiptData.items.map(item => ({
-        ...item,
-        category: item.category === "House Expenses" ? "House Projects" : item.category
-      }));
-
-      document.getElementById("status").innerHTML = "";
-      renderResults();
+      ynabCategories = await fetchCategories()
     } catch (err) {
-      document.getElementById("status").innerHTML = "";
-      document.getElementById("results").innerHTML = `<div class="error">❌ ${err.message}</div>`;
-    } finally {
-      document.getElementById("scanBtn").disabled = false;
+      console.warn('Could not load YNAB categories:', err)
     }
   }
 
-  function changeCategory(index, newCategory) {
-    receiptData.items[index].category = newCategory;
-    renderResults();
+  document.getElementById("fileInput").addEventListener("change", (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    imageMediaType = file.type || "image/jpeg"
+    const reader = new FileReader()
+reader.onload = (ev) => {
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    const maxSize = 1200
+    let { width, height } = img
+    if (width > maxSize || height > maxSize) {
+      if (width > height) { height = Math.round(height * maxSize / width); width = maxSize }
+      else { width = Math.round(width * maxSize / height); height = maxSize }
+    }
+    canvas.width = width
+    canvas.height = height
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+    const compressed = canvas.toDataURL('image/jpeg', 0.85)
+    imageBase64 = compressed.split(",")[1]
+    imageMediaType = 'image/jpeg'
+    const preview = document.getElementById("previewImg")
+    preview.src = compressed
+    preview.style.display = "block"
+    document.getElementById("scanBtn").disabled = false
+    document.getElementById("results").innerHTML = ""
+    document.getElementById("status").innerHTML = ""
+  }
+  img.src = ev.target.result
+}
+      const preview = document.getElementById("previewImg")
+      preview.src = ev.target.result
+      preview.style.display = "block"
+      document.getElementById("scanBtn").disabled = false
+      document.getElementById("results").innerHTML = ""
+      document.getElementById("status").innerHTML = ""
+    }
+    reader.readAsDataURL(file)
+  })
+
+  window.scanReceipt = async function() {
+    if (!imageBase64) return
+    document.getElementById("scanBtn").disabled = true
+    document.getElementById("status").innerHTML = `<p><span class="spinner"></span>Reading receipt…</p>`
+    document.getElementById("results").innerHTML = ""
+
+    try {
+      // Build dynamic category list for the prompt
+      const categoryNames = ynabCategories.length
+        ? ynabCategories.map(c => c.name).join(', ')
+        : 'Groceries, Household Supplies, House Projects, Health, Pet Expenses, Clothes'
+
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageBase64, mediaType: imageMediaType, categoryNames }),
+      })
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      receiptData = await res.json()
+
+      // Normalize legacy category name
+      receiptData.items = receiptData.items.map(item => ({
+        ...item,
+        category: item.category === "House Expenses" ? "House Projects" : item.category
+      }))
+
+      document.getElementById("status").innerHTML = ""
+      renderResults()
+    } catch (err) {
+      document.getElementById("status").innerHTML = ""
+      document.getElementById("results").innerHTML = `<div class="error">❌ ${err.message}</div>`
+    } finally {
+      document.getElementById("scanBtn").disabled = false
+    }
+  }
+
+  window.changeCategory = function(index, newCategory) {
+    receiptData.items[index].category = newCategory
+    renderResults()
+  }
+
+  window.changeAccount = function(accountId) {
+    selectedAccountId = accountId
+  }
+
+  window.postToYNAB = async function() {
+    const btn = document.getElementById('ynabBtn')
+    btn.disabled = true
+    btn.textContent = 'Posting…'
+
+    try {
+      // Save vendor mapping for next time
+      if (receiptData.store) {
+        saveVendorMapping(receiptData.store, selectedAccountId)
+      }
+
+      const transaction = buildTransaction(receiptData, selectedAccountId, ynabCategories)
+      await postTransaction(transaction)
+
+      document.getElementById('ynabBtn').style.display = 'none'
+      document.getElementById('results').insertAdjacentHTML('afterend',
+        `<div class="success-banner">✅ Posted to YNAB successfully!</div>`)
+    } catch (err) {
+      btn.disabled = false
+      btn.textContent = '💚 Post to YNAB'
+      document.getElementById("results").insertAdjacentHTML('afterend',
+        `<div class="error">❌ YNAB error: ${err.message}</div>`)
+    }
+  }
+
+  window.rescan = function() {
+    document.getElementById("fileInput").value = ""
+    document.getElementById("previewImg").style.display = "none"
+    document.getElementById("results").innerHTML = ""
+    document.getElementById("status").innerHTML = ""
+    document.getElementById("scanBtn").disabled = true
+    imageBase64 = ""
+    receiptData = null
+    // Remove success banner if present
+    document.querySelectorAll('.success-banner, .error').forEach(el => el.remove())
   }
 
   function renderResults() {
-    const grouped = {};
+    const categoryNames = ynabCategories.map(c => c.name)
+
+    const grouped = {}
     for (const [i, item] of receiptData.items.entries()) {
-      if (!grouped[item.category]) grouped[item.category] = [];
-      grouped[item.category].push({ ...item, index: i });
+      if (!grouped[item.category]) grouped[item.category] = []
+      grouped[item.category].push({ ...item, index: i })
     }
 
     let html = `<div class="results">
       <div class="store-name">${receiptData.store || "Receipt"}</div>
-      <div class="store-meta">${receiptData.date || ""}</div>`;
+      <div class="store-meta">${receiptData.date || ""}</div>`
 
     for (const [cat, items] of Object.entries(grouped)) {
-      const color = CATEGORY_COLORS[cat] || "#8e8e93";
+      const color = CATEGORY_COLORS[cat] || "#8e8e93"
       html += `<div class="category-group">
-        <span class="category-header" style="background:${color}">${cat}</span>`;
+        <span class="category-header" style="background:${color}">${cat}</span>`
       for (const item of items) {
-        const optionsHTML = CATEGORIES.map(c =>
-          `<option value="${c}" ${c === item.category ? "selected" : ""}>${c}</option>`
-        ).join("");
+        const optionsHTML = categoryNames.length
+          ? categoryNames.map(c => `<option value="${c}" ${c === item.category ? "selected" : ""}>${c}</option>`).join("")
+          : Object.keys(CATEGORY_COLORS).map(c => `<option value="${c}" ${c === item.category ? "selected" : ""}>${c}</option>`).join("")
         html += `<div class="item-row">
           <span class="item-name">${item.name}</span>
           <select class="category-select" onchange="changeCategory(${item.index}, this.value)"
-            style="border-color:${color}">
-            ${optionsHTML}
-          </select>
+            style="border-color:${color}">${optionsHTML}</select>
           <span class="item-price">$${item.price.toFixed(2)}</span>
-        </div>`;
+        </div>`
       }
-      html += `</div>`;
+      html += `</div>`
     }
 
-    const itemTotal = receiptData.items.reduce((s, i) => s + i.price, 0);
-    html += `<div class="total-row"><span>Total</span><span>$${(receiptData.total ?? itemTotal).toFixed(2)}</span></div>`;
+    const itemTotal = receiptData.items.reduce((s, i) => s + i.price, 0)
+    html += `<div class="total-row"><span>Total</span><span>$${(receiptData.total ?? itemTotal).toFixed(2)}</span></div>`
 
     // Category summary
-    html += `<div class="category-summary">`;
-    let summaryTotal = 0;
+    html += `<div class="category-summary">`
+    let summaryTotal = 0
     for (const [cat, items] of Object.entries(grouped)) {
-      const catTotal = items.reduce((s, i) => s + i.price, 0);
-      summaryTotal += catTotal;
-      html += `<div class="summary-row"><span>${cat}</span><span>$${catTotal.toFixed(2)}</span></div>`;
+      const catTotal = items.reduce((s, i) => s + i.price, 0)
+      summaryTotal += catTotal
+      html += `<div class="summary-row"><span>${cat}</span><span>$${catTotal.toFixed(2)}</span></div>`
     }
-    html += `<div class="summary-row total"><span>Total</span><span>$${summaryTotal.toFixed(2)}</span></div>`;
-    html += `</div></div>`;
-    html += `<button class="btn btn-secondary" onclick="rescan()">📷 Scan Another</button>`;
+    html += `<div class="summary-row total"><span>Total</span><span>$${summaryTotal.toFixed(2)}</span></div>`
+    html += `</div></div>`
 
-    document.getElementById("results").innerHTML = html;
+    // Account selector
+    const vendorMappings = JSON.parse(localStorage.getItem('vendorMappings') || '{}')
+    const mappedAccountId = receiptData.store ? getVendorMapping(receiptData.store, vendorMappings) : null
+    selectedAccountId = mappedAccountId || ACCOUNTS[0].id
+    const isKnownVendor = !!mappedAccountId
+
+    html += `<div class="account-selector">
+      <label>Post to account</label>
+      <select onchange="changeAccount(this.value)">`
+    for (const acc of ACCOUNTS) {
+      html += `<option value="${acc.id}" ${acc.id === selectedAccountId ? "selected" : ""}>${acc.name}</option>`
+    }
+    html += `</select>`
+    if (isKnownVendor) {
+      html += `<div class="account-hint">remembered from last time · change above to update</div>`
+    }
+    html += `</div>`
+
+    html += `<button class="btn btn-success" id="ynabBtn" onclick="postToYNAB()">💚 Post to YNAB</button>`
+    html += `<button class="btn btn-secondary" onclick="rescan()">📷 Scan Another</button>`
+
+    document.getElementById("results").innerHTML = html
   }
 
-  function rescan() {
-    document.getElementById("fileInput").value = "";
-    document.getElementById("previewImg").style.display = "none";
-    document.getElementById("results").innerHTML = "";
-    document.getElementById("status").innerHTML = "";
-    document.getElementById("scanBtn").disabled = true;
-    imageBase64 = "";
-    receiptData = null;
-  }
+  init()
 </script>
 </body>
 </html>
